@@ -1,6 +1,10 @@
 package utils
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -31,4 +35,14 @@ func SetHash(hash string) string {
 
 func GetHash(hash string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(hash, ",", "/"), ".", "="), "~", "+")
+}
+
+func CalculateHash(r io.Reader) (string, error) {
+	h := sha256.New()
+	if _, err := io.Copy(h, r); err != nil {
+		log.Println(err)
+		return "", err
+	}
+
+	return base64.StdEncoding.EncodeToString(h.Sum(nil)), nil
 }

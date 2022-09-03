@@ -3,6 +3,7 @@
 for i in `seq 1 6`
 do
     mkdir -p /tmp/$i/object
+    mkdir /tmp/$i/temp
 done
 
 export RABBITMQ_SERVER=amqp://harukaze:123456@localhost:5672

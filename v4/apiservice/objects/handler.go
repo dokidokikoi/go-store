@@ -43,7 +43,8 @@ func put(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c, e := storeObject(r.Body, utils.SetHash(hash))
+	size := utils.GetSizeFromHeader(r.Header)
+	c, e := storeObject(r.Body, hash, size)
 	if e != nil {
 		log.Println(e)
 		w.WriteHeader(c)
@@ -55,7 +56,6 @@ func put(w http.ResponseWriter, r *http.Request) {
 	}
 
 	name := strings.Split(r.URL.EscapedPath(), "/")[2]
-	size := utils.GetSizeFromHeader(r.Header)
 	e = es.AddVersion(name, hash, size)
 	if e != nil {
 		log.Println(e)
@@ -63,28 +63,40 @@ func put(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func storeObject(r io.Reader, object string) (int, error) {
-	stream, e := putStream(object)
+func storeObject(r io.Reader, hash string, size int64) (int, error) {
+	if locate.Exist(utils.SetHash(hash)) {
+		return http.StatusOK, nil
+	}
+
+	stream, e := putStream(utils.SetHash(hash), size)
 	if e != nil {
 		return http.StatusServiceUnavailable, e
 	}
 
-	io.Copy(stream, r)
-	e = stream.Close()
+	reader := io.TeeReader(r, stream)
+	d, e := utils.CalculateHash(reader)
 	if e != nil {
 		return http.StatusInternalServerError, e
 	}
 
+	if d != hash {
+		stream.Commit(false)
+		return http.StatusBadRequest, fmt.Errorf("object hash mismatch, calulated=%s, requested=%s", d, hash)
+	}
+
+	stream.Commit(true)
+	log.Println("sdfgdhdrsssssssssssss")
+
 	return http.StatusOK, nil
 }
 
-func putStream(object string) (*objectstream.PutStream, error) {
+func putStream(hash string, size int64) (*objectstream.TempPutStream, error) {
 	server := heartbeat.ChooseRandomDataServer()
 	if server == "" {
 		return nil, fmt.Errorf("cannot find any dataServer")
 	}
 
-	return objectstream.NewPutStream(server, object), nil
+	return objectstream.NewTempPutStream(server, hash, size)
 }
 
 func get(w http.ResponseWriter, r *http.Request) {
