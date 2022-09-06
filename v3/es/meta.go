@@ -10,6 +10,7 @@ import (
 	"strings"
 )
 
+// 文件元数据
 type Metadata struct {
 	Name    string
 	Version int
@@ -17,6 +18,7 @@ type Metadata struct {
 	Hash    string
 }
 
+// 通过 name 和 version 获取元数据
 func getMetadata(name string, versionId int) (meta Metadata, e error) {
 	url := fmt.Sprintf("http://%s/metadata/_doc/%s_%d/_source", os.Getenv("ES_SERVER"), name, versionId)
 
@@ -35,6 +37,7 @@ func getMetadata(name string, versionId int) (meta Metadata, e error) {
 	return
 }
 
+// 获取 name 最新的元数据
 func SearchLatestVersion(name string) (meta Metadata, e error) {
 	doc := fmt.Sprintf(`{"query":{"match":{"name":"%s"}},"sort": [{"version":{"order":"desc"}}],"from":0,"size":1}`, name)
 
@@ -65,6 +68,7 @@ func SearchLatestVersion(name string) (meta Metadata, e error) {
 	return
 }
 
+// 如果版本为0，获取最新元数据
 func GetMetadata(name string, version int) (meta Metadata, e error) {
 	if version == 0 {
 		return SearchLatestVersion(name)
@@ -73,6 +77,7 @@ func GetMetadata(name string, version int) (meta Metadata, e error) {
 	return getMetadata(name, version)
 }
 
+// 添加元数据，指定版本
 func PutMetadata(name string, version int, size int64, hash string) error {
 	doc := fmt.Sprintf(`{"name":"%s","version":%d,"size":%d,"hash":"%s"}`, name, version, size, hash)
 
@@ -97,6 +102,7 @@ func PutMetadata(name string, version int, size int64, hash string) error {
 	return nil
 }
 
+// 添加元数据，版本加一
 func AddVersion(name, hash string, size int64) error {
 	version, e := SearchLatestVersion(name)
 	if e != nil {
@@ -106,6 +112,7 @@ func AddVersion(name, hash string, size int64) error {
 	return PutMetadata(name, version.Version+1, size, hash)
 }
 
+// 获取所有元数据，指定 name 返回对应文件所以版本元信息
 func SearchAllVersion(name string, from, size int) ([]Metadata, error) {
 	url := fmt.Sprintf("http://%s/metadata/_search", os.Getenv("ES_SERVER"))
 	doc := fmt.Sprintf(`{"query":?,"sort": [{"version":{"order":"desc"}}],"from":%d,"size":%d}`, from, size)

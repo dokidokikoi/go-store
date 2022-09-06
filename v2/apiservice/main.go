@@ -11,6 +11,7 @@ import (
 )
 
 func main() {
+	// 监听心跳
 	go heartbeat.ListenHeartbeat()
 	http.HandleFunc("/object/", objects.Handler)
 	http.HandleFunc("/locate/", locate.Handler)

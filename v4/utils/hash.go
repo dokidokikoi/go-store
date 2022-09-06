@@ -37,6 +37,7 @@ func GetHash(hash string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(hash, ",", "/"), ".", "="), "~", "+")
 }
 
+// 计算数据散列值并返回
 func CalculateHash(r io.Reader) (string, error) {
 	h := sha256.New()
 	if _, err := io.Copy(h, r); err != nil {

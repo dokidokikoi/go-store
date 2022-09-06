@@ -7,11 +7,13 @@ import (
 	"dataservice/rabbitmq"
 )
 
+// 本地存储是否存在该文件
 func Locate(name string) bool {
 	_, err := os.Stat(name)
 	return !os.IsNotExist(err)
 }
 
+// 监听交换机发送的消息
 func StartLocate() {
 	q := rabbitmq.New(os.Getenv("RABBITMQ_SERVER"))
 	defer q.Close()

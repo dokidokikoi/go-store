@@ -43,6 +43,7 @@ func put(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 数据服务使用 hash 为文件名存储文件
 	c, e := storeObject(r.Body, utils.SetHash(hash))
 	if e != nil {
 		log.Println(e)
@@ -56,6 +57,8 @@ func put(w http.ResponseWriter, r *http.Request) {
 
 	name := strings.Split(r.URL.EscapedPath(), "/")[2]
 	size := utils.GetSizeFromHeader(r.Header)
+
+	// 将元数据保存到 es
 	e = es.AddVersion(name, hash, size)
 	if e != nil {
 		log.Println(e)
@@ -102,6 +105,7 @@ func get(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// 获取文件对应版本的元数据
 	meta, e := es.GetMetadata(name, version)
 	if e != nil {
 		log.Println(e)
@@ -114,6 +118,8 @@ func get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	object := utils.SetHash(meta.Hash)
+
+	// 更据元数据的 hash 读取文件
 	stream, e := getStream(object)
 	if e != nil {
 		log.Println(e)
@@ -133,6 +139,7 @@ func getStream(object string) (io.Reader, error) {
 	return objectstream.NewGetStream(server, object)
 }
 
+// 不会物理删除，将对于版本的元数据的 hash 置空即可
 func del(w http.ResponseWriter, r *http.Request) {
 	name := strings.Split(r.URL.EscapedPath(), "/")[2]
 	version, e := es.SearchLatestVersion(name)

@@ -73,23 +73,25 @@ func storeObject(r io.Reader, hash string, size int64) (int, error) {
 		return http.StatusServiceUnavailable, e
 	}
 
+	// io.TeeReader() 返回 io.Reader，读取返回的 reader 时，也向 Writer（stream） 中写
 	reader := io.TeeReader(r, stream)
 	d, e := utils.CalculateHash(reader)
 	if e != nil {
 		return http.StatusInternalServerError, e
 	}
 
+	// 数据校验，不一致则从临时目录删除
 	if d != hash {
 		stream.Commit(false)
 		return http.StatusBadRequest, fmt.Errorf("object hash mismatch, calulated=%s, requested=%s", d, hash)
 	}
 
 	stream.Commit(true)
-	log.Println("sdfgdhdrsssssssssssss")
 
 	return http.StatusOK, nil
 }
 
+// 将文件信息存到临时目录的 uuid 文件
 func putStream(hash string, size int64) (*objectstream.TempPutStream, error) {
 	server := heartbeat.ChooseRandomDataServer()
 	if server == "" {

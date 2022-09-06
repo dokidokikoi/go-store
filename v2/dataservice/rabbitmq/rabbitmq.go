@@ -6,12 +6,14 @@ import (
 	"github.com/streadway/amqp"
 )
 
+// RabbitMQ结构图
 type RabbitMQ struct {
 	channel  *amqp.Channel
 	Name     string
 	exchange string
 }
 
+// 连接RabbitMQ服务，声明一个消息队列
 func New(s string) *RabbitMQ {
 	conn, e := amqp.Dial(s)
 	if e != nil {
@@ -40,6 +42,7 @@ func New(s string) *RabbitMQ {
 	return mq
 }
 
+// 消息队列绑定交换机
 func (q *RabbitMQ) Bind(exchange string) {
 	e := q.channel.QueueBind(
 		q.Name,
@@ -54,6 +57,7 @@ func (q *RabbitMQ) Bind(exchange string) {
 	q.exchange = exchange
 }
 
+// 向消息队列发布消息
 func (q *RabbitMQ) Send(queue string, body interface{}) {
 	str, e := json.Marshal(body)
 	if e != nil {
@@ -74,6 +78,7 @@ func (q *RabbitMQ) Send(queue string, body interface{}) {
 	}
 }
 
+// 向交换机发送消息
 func (q *RabbitMQ) Publish(excahnge string, body interface{}) {
 	str, e := json.Marshal(body)
 	if e != nil {
@@ -94,6 +99,7 @@ func (q *RabbitMQ) Publish(excahnge string, body interface{}) {
 	}
 }
 
+// 消费消息
 func (q *RabbitMQ) Consume() <-chan amqp.Delivery {
 	c, e := q.channel.Consume(
 		q.Name,
@@ -110,6 +116,7 @@ func (q *RabbitMQ) Consume() <-chan amqp.Delivery {
 	return c
 }
 
+// 关闭连接
 func (q *RabbitMQ) Close() {
 	q.channel.Close()
 }

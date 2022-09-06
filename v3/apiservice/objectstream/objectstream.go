@@ -15,6 +15,7 @@ type PutStream struct {
 func NewPutStream(server, object string) *PutStream {
 	reader, writer := io.Pipe()
 	c := make(chan error)
+
 	go func() {
 		request, _ := http.NewRequest("PUT", "http://"+server+"/object/"+object, reader)
 		client := http.Client{}

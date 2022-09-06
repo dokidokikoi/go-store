@@ -9,6 +9,8 @@ import (
 	"store/rabbitmq"
 )
 
+// 存储目录下的对象文件
+// 避免每次查询文件是否存在时访问磁盘，将所有文件的散列值读入内存
 var objects = make(map[string]int)
 var mutex sync.Mutex
 
@@ -39,19 +41,24 @@ func StartLocate() {
 }
 
 func CollectObjects() {
+	// 读取存储目录里的所有文件
 	files, _ := filepath.Glob(os.Getenv("STORE_ROOT") + "/object/*")
+
+	// 获取每个文件的文件名（散列值），加入缓存
 	for i := range files {
 		hash := filepath.Base(files[i])
 		objects[hash] = 1
 	}
 }
 
+// 将用户上传的文件加入内存
 func Add(hash string) {
 	mutex.Lock()
 	defer mutex.Unlock()
 	objects[hash] = 1
 }
 
+// 将文件移出内存
 func Del(hash string) {
 	mutex.Lock()
 	defer mutex.Unlock()

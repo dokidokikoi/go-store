@@ -42,6 +42,7 @@ type tempInfo struct {
 	Size int64
 }
 
+// 将临时文件信息写入临时文件目录
 func (t *tempInfo) writeToFile() error {
 	f, e := os.Create(os.Getenv("STORE_ROOT") + "/temp/" + t.Uuid)
 	if e != nil {
@@ -56,9 +57,12 @@ func (t *tempInfo) writeToFile() error {
 	return nil
 }
 
+// 临时文件转正，转正后将临时文件删除
 func put(w http.ResponseWriter, r *http.Request) {
 	uuid := strings.Split(r.URL.EscapedPath(), "/")[2]
 	log.Println(uuid)
+
+	// 读出临时文件信息
 	tempInfo, e := readFromFile(uuid)
 	if e != nil {
 		log.Println(e)
@@ -77,6 +81,7 @@ func put(w http.ResponseWriter, r *http.Request) {
 
 	defer f.Close()
 
+	// 获取临时文件的基本信息
 	info, e := f.Stat()
 	if e != nil {
 		log.Println(e)
@@ -85,7 +90,10 @@ func put(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actual := info.Size()
+	// 将存有临时文件信息的文件删除
 	os.Remove(infoFile)
+
+	// 临时文件的大小与实际的大小不同，不能转正
 	if actual != tempInfo.Size {
 		os.Remove(datFile)
 		log.Println("actual size mismatch, expect", tempInfo.Size, "actual", actual)
@@ -94,11 +102,13 @@ func put(w http.ResponseWriter, r *http.Request) {
 	commTempObject(datFile, tempInfo)
 }
 
+// 将临时文件移动到存储目录，并改名，加入缓存
 func commTempObject(datFile string, tempInfo *tempInfo) {
 	os.Rename(datFile, os.Getenv("STORE_ROOT")+"/object/"+tempInfo.Name)
 	locate.Add(tempInfo.Name)
 }
 
+// 将临时文件存入临时目录
 func patch(w http.ResponseWriter, r *http.Request) {
 	uuid := strings.Split(r.URL.EscapedPath(), "/")[2]
 	tempinfo, e := readFromFile(uuid)
@@ -142,6 +152,7 @@ func patch(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// 读取临时文件的信息文件
 func readFromFile(uuid string) (*tempInfo, error) {
 	f, e := os.Open(os.Getenv("STORE_ROOT") + "/temp/" + uuid)
 	if e != nil {
@@ -158,6 +169,7 @@ func readFromFile(uuid string) (*tempInfo, error) {
 	return &info, nil
 }
 
+// 将临时文件的信息存储到临时目录并创建出临时文件的文件
 func post(w http.ResponseWriter, r *http.Request) {
 	output, _ := exec.Command("uuidgen").Output()
 	uuid := strings.TrimSuffix(string(output), "\n")
@@ -181,10 +193,13 @@ func post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 创建出临时文件的文件
 	os.Create(os.Getenv("STORE_ROOT") + "/temp/" + t.Uuid + ".dat")
+
 	w.Write([]byte(uuid))
 }
 
+// 删除临时文件
 func del(w http.ResponseWriter, r *http.Request) {
 	uuid := strings.Split(r.URL.EscapedPath(), "/")[2]
 	infoFile := os.Getenv("STORE_ROOT") + "/temp/" + uuid

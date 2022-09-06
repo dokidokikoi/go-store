@@ -27,6 +27,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusMethodNotAllowed)
 }
 
+// 上传文件
 func put(w http.ResponseWriter, r *http.Request) {
 	object := strings.Split(r.URL.EscapedPath(), "/")[2]
 	c, e := storeObject(r.Body, object)
@@ -61,6 +62,7 @@ func putStream(object string) (*objectstream.PutStream, error) {
 	return objectstream.NewPutStream(server, object), nil
 }
 
+// 下载文件
 func get(w http.ResponseWriter, r *http.Request) {
 	object := strings.Split(r.URL.EscapedPath(), "/")[2]
 	stream, e := getStream(object)
@@ -74,10 +76,12 @@ func get(w http.ResponseWriter, r *http.Request) {
 }
 
 func getStream(object string) (io.Reader, error) {
+	// 获取数据服务地址
 	server := locate.Locate(object)
 	if server == "" {
 		return nil, fmt.Errorf("object %s locate fail", object)
 	}
 
+	// 获取文件输入流
 	return objectstream.NewGetStream(server, object)
 }

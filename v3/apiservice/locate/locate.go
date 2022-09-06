@@ -11,6 +11,7 @@ import (
 	"store/rabbitmq"
 )
 
+// 这里的 url 从 /locate/:name 变成了 /locate/:hash
 func Handler(w http.ResponseWriter, r *http.Request) {
 	m := r.Method
 	if m != http.MethodGet {

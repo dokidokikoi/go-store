@@ -77,6 +77,7 @@ func (r *GetStream) Read(p []byte) (n int, err error) {
 }
 
 func NewTempPutStream(server, hash string, size int64) (*TempPutStream, error) {
+	// 将文件信息存到临时目录下文件名为生成的uuid
 	request, e := http.NewRequest("POST", "http://"+server+"/temp/"+hash, nil)
 	if e != nil {
 		return nil, e
@@ -89,6 +90,7 @@ func NewTempPutStream(server, hash string, size int64) (*TempPutStream, error) {
 		return nil, e
 	}
 
+	// 根据uuid将临时文件转正和删除
 	uuid, e := ioutil.ReadAll(response.Body)
 	if e != nil {
 		return nil, e
@@ -100,6 +102,7 @@ func NewTempPutStream(server, hash string, size int64) (*TempPutStream, error) {
 	}, nil
 }
 
+// 计算散列值时会被调用，将用户上传的数据保存到临时目录，等待校验结果
 func (w *TempPutStream) Write(p []byte) (n int, err error) {
 	request, e := http.NewRequest("PATCH", "http://"+w.Server+"/temp/"+w.Uuid, strings.NewReader(string(p)))
 	if e != nil {
@@ -118,6 +121,7 @@ func (w *TempPutStream) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+// 转正或删除临时文件
 func (w *TempPutStream) Commit(flag bool) {
 	method := "DELETE"
 	if flag {

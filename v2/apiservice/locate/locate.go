@@ -13,6 +13,7 @@ import (
 
 func Handler(w http.ResponseWriter, r *http.Request) {
 	m := r.Method
+
 	if m != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -26,6 +27,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 
+// 定位文件
 func Locate(name string) string {
 	q := rabbitmq.New(os.Getenv("RABBITMQ_SERVER"))
 	q.Publish("dataServers", name)

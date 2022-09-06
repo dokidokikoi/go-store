@@ -41,6 +41,7 @@ func getFile(hash string) string {
 		return ""
 	}
 
+	// 数据校验，因为可能由于硬件上的问题导致数据出错，例如数据降解
 	d := utils.SetHash(h)
 	f.Close()
 	if d != hash {

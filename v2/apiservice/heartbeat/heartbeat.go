@@ -10,16 +10,22 @@ import (
 	"apiservice/rabbitmq"
 )
 
+// 数据服务，键是服务地址，值是最后心跳时间
 var dataServers = make(map[string]time.Time)
+
+// 对 dataServers 操作时需要加锁保证数据安全
 var mutex sync.Mutex
 
+// 监听数据服务心跳
 func ListenHeartbeat() {
 	q := rabbitmq.New(os.Getenv("RABBITMQ_SERVER"))
 	defer q.Close()
 
 	q.Bind("apiServers")
 	c := q.Consume()
+
 	go removeExpireDataServer()
+
 	for msg := range c {
 		dataServer, e := strconv.Unquote(string(msg.Body))
 		if e != nil {
@@ -32,6 +38,7 @@ func ListenHeartbeat() {
 	}
 }
 
+// 移除过期的数据服务
 func removeExpireDataServer() {
 	for {
 		time.Sleep(5 * time.Second)
@@ -56,6 +63,7 @@ func GetDataServers() []string {
 	return ds
 }
 
+// 返回随机数据服务地址
 func ChooseRandomDataServer() string {
 	ds := GetDataServers()
 	n := len(ds)
