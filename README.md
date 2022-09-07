@@ -63,7 +63,17 @@ LISTEN_ADDRESS=:8888 STORE_ROOT=/object/1 go run main.go
 
 
 
-# v2 可推展的分布式系统
+测试： 
+
+```
+PUT /object/test
+```
+
+
+
+
+
+# v2 可扩展的分布式系统
 
 ```
 .
@@ -109,7 +119,7 @@ v1 只是最简单的单体服务，我们现在实现可扩展的分布式存�
 
 业务流程如下：
 
-![image-20220906093819142](../../.config/Typora/typora-user-images/image-20220906093819142.png)
+![image-20220906093819142](https://harukaze-blog.oss-cn-shenzhen.aliyuncs.com/article/image-20220906093819142.png)
 
 启动脚本：
 
@@ -446,3 +456,80 @@ LISTEN_ADDRESS=localhost:12352 go run apiservice/main.go
     └── hash.go
 ```
 
+数据存储肯定是要保证数据的可靠，防止数据丢失，我们还需要加上数据冗余
+
+在计算机领域,数据冗余是指在存储和传输的过程中,除了实际需要的数据,还存在一些额外数据用来纠正错误。这些额外的数据可以是一份简单的原始数据的复制,也可以是一些经过精心选择的校验数据,允许我们在一定程度上检测并修复损坏的数据。
+
+
+
+在此项目中实现了 Reed Solomon纠 删码。
+
+在编码理论学中,RS纠删码属于非二进制循环码,它的实现基于有限域上的一元多项式,并被广泛应用于CD、DVD、蓝光、QR码等消费品技术,DSL、WiMAX等数据传输技术,DVB、ATSC等广播技术以及卫星通信技术等。
+
+RS纠删码允许我们选择数据片和校验片的数量,本项目选择了4个数据片加两个校验片,也就是说会把一个完整的对象平均分成6个分片对象,其中包括4个数据片对象,每个对象的大小是原始对象大小的25%,另外还有两个校验片,其大小和数据片一样。这6个分片对象被接口服务存储在6个不同的数据服务节点上,只需要其中任意4个就可以恢复出完整的对象。
+
+
+
+业务流程：
+
+上传文件：
+
+![image-20220906134956996](https://harukaze-blog.oss-cn-shenzhen.aliyuncs.com/article/image-20220906134956996.png)
+
+<span>下载文件：</span>
+
+![image-20220906135021486](https://harukaze-blog.oss-cn-shenzhen.aliyuncs.com/article/image-20220906135021486.png)
+
+
+
+测试：
+
+```
+echo -n "this object will be separate to 4+2 shards" |
+openssl dgst -sha256 -binary | base64
+```
+
+`MBMxWHrPMsuOBaVYHkwScZQRyTRMQyiKp2oelpLZza8=`
+
+
+
+上传文件：
+
+```
+curl -v 10.29.2.1:12345/objects/test5 -XPUT -d "this object
+will be separate to 4+2 shards" -H "Digest: SHA-
+256=MBMxWHrPMsuOBaVYHkwScZQRy TRMQyiKp2oelpLZza8="
+* Hostname was NOT found in DNS cache
+*
+ Trying 10.29.2.1...
+* Connected to 10.29.2.1 (10.29.2.1) port 12345 (#0)
+> PUT /objects/test5 HTTP/1.1
+> User-Agent: curl/7.38.0
+> Host: 10.29.2.1:12345
+> Accept: */*
+> Digest: SHA-256=MBMxWHrPMsuOBaVYHkwScZQRyTRMQyiKp2oelpLZza8=
+> Content-Length: 42
+> Content-Type: application/x-www-form-urlencoded
+>
+* upload completely sent off: 42 out of 42 bytes
+< HTTP/1.1 200 OK
+< Date: Wed, 09 Aug 2017 18:07:28 GMT
+< Content-Length: 0
+< Content-Type: text/plain; charset=utf-8
+<
+* Connection #0 to host 10.29.2.1 left intact
+```
+
+![image-20220907145704900](https://harukaze-blog.oss-cn-shenzhen.aliyuncs.com/article/image-20220907145704900.png)
+
+
+
+下载文件：
+
+```
+curl 10.29.2.1:12345/objects/test5
+```
+
+
+
+之后还可以将某个节点的文件删除，看看是否能否成功获取文本和将删除分片恢复
