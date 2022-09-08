@@ -633,3 +633,57 @@ $ curl localhost:12351/object/test6 -H "range: bytes=32000-" > /tmp/output2
 $ diff -s /tmp/output2 /tmp/output 
 ```
 
+
+
+# v7 数据压缩
+
+最适合做数据压缩的地方是客户端。
+
+一个高性能的客户端不仅可以将大量小对象打包成大对象高存储和传输的效率,也可以在客户机本地进行数据压缩,进一步节省网络带宽和存储空间。所以如果你的云存储系统在设计最初就包含了专门的客户端,那么别犹豫,一定要将数据压缩功能放在客户端,而不是服务端。
+
+本项目采用 gzip 压缩算法，在服务端进行压缩
+
+## 下载时的数据压缩
+
+客户端在下载对象时可以设置Accept-Encoding头部为gzip。接口服务在检查到这个头部后会将对象数据流经过gzip压缩后写入HTTP响应的正文
+
+
+
+## 测试
+
+为了体现应用gzip压缩后存储和传输的数据量变化,我们生成一个100MB的测试文件,并且其中的数据都填为0
+
+```sh
+$ dd if=/dev/zero of=/tmp/file bs=1M count=100
+$ openssl dgst -sha256 -binary /tmp/file | base64
+```
+
+文件上传
+
+```sh
+$ curl -v localhost:12351/object/test7 -XPUT --data-binary @/tmp/file -H "Digest: SHA-256=IEkqTQ2E+L6xdn9mFiKfhdRMKCe2S9v7Jg7hL6EQng4="
+```
+
+用ls命令查看分片对象的大小。
+
+```sh
+ls -ltr /tmp/?/objects/IE*
+```
+
+如果不使用数据压缩,一个100MB的对象,经过4+2 RS编码后每个分片是25MB,但是经过gzip压缩后,我们可以看到实际的分片大小只有25KB。
+
+
+
+接下来我们下载test7对象并对比数据。
+
+```sh
+$ curl -v localhost:12351/object/test7 -o /tmp/output
+$ diff -s /tmp/output /tmp/file
+```
+
+```sh
+$ curl -v localhost:12351/object/test7 -H "Accept-Encoding: gzip" -o /tmp/output2.gz
+$ gunzip /tmp/output2.gz 
+$ diff -s /tmp/output2 /tmp/file
+```
+
