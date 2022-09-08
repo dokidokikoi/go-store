@@ -533,3 +533,103 @@ curl 10.29.2.1:12345/objects/test5
 
 
 之后还可以将某个节点的文件删除，看看是否能否成功获取文本和将删除分片恢复
+
+
+
+
+
+# v6 断点续传
+
+
+
+## 断点下载流程
+
+断点下载的实现非常简单,客户端在GET对象请求时通过设置Range头部来告诉接口服务需要从什么位置开始输出对象的数据
+
+接口服务的处理流程在生成对象流之前和上一章没有任何区别,但是在成功打开了对象数据流之后,接口服务会额外调用 `rs.RSGetStream.Seek` 方法跳至客户端请求的位置,然后才开始输出数据。
+
+
+
+## 断点上传流程
+
+接口服务会对数据进行散列值校验,当发生网络故障时,如果上传的数据跟期望的不一致,那么整个上传的数据都会被丢弃。所以断点上传在一开始就需要客户端和接口服务做好约定,使用特定的接口进行上传
+
+客户端在知道自己要上传大对象时就主动改用对象 POST 接口,提供对象的散列值和大小。接口服务的处理流程和上一章处理对象 PUT 一样,搜索 6 个数据服务并分别 POST 临时对象接口。数据服务的地址以及返回的 uuid 会被记录在一个 token 里返回给客户端
+
+客户端 POST 对象后会得到一个 token。对 token 进行 PUT 可以上传数据在上传时客户端需要指定 range 头部来告诉接口服务上传数据的范围。接口服务对 token 进行解码,获取 6 个分片所在的数据服务地址以及 uuid, 分别调用 PATCH 将数据写入 6 个临时对象。
+
+通过 PUT 上传的数据并不一定会被接口服务完全接收。我们在第5章已经知道,经过RS分片的数据是以块的形式分批写入4个数据片的,每个数据片一次写入 8000 字节,4个数据片一共写入 32 000 字节。所以除非是最后一批数据,否则接口服务只接收 32 000 字节的整数倍进行写入。这是一个服务端的行为逻辑,我们不能要求客户端知道接口服务背后的逻辑,所以接口服务必须提供 token 的 HEAD 操作,让客户端知道服务端上该 token 目前的写入进度
+
+
+
+
+
+测试：
+
+首先,让我们生成一个长度为100文件,并计算散列值。
+
+```sh
+# 生成一个长度为100文件
+$ dd if=/dev/urandom of=/tmp/file bs=1000 count=100
+# 计算散列值
+$ openssl dgst -sha256 -binary /tmp/file | base64
+```
+
+
+
+将这个文件分段上传为 test6 对象
+
+```sh
+$ curl -v localhost:12351/object/test6 -XPOST -H "Digest:SHA-256=mXNXv6rY7k+jC6jKT4LFhVL5ONslk+rSGLoKbSeE5nc=" -H "Size: 100000"
+```
+
+接口服务将 token 放在 Location 响应头部返回,我们先上传随机文件的前 50 000 字节
+
+```sh
+$ dd if=/tmp/file of=/tmp/first bs=1000 count=50
+```
+
+```sh
+$ curl -v -XPUT --data-binary @/tmp/first localhost:12351/temp/eyJOYW1lIjoidGVzdDYiLCJTaXplIjoxMDAwMDAsIkhhc2giOiJObFlrSzdrUn5ZQUxKR01jRkVzNEpCclJpa2w2YXIsYk9TdDlnZnFoSkVNXyIsIlNlcnZlcnMiOlsibG9jYWxob3N0OjEyMzUwIiwibG9jYWxob3N0OjEyMzQ1IiwibG9jYWxob3N0OjEyMzQ5IiwibG9jYWxob3N0OjEyMzQ4IiwibG9jYWxob3N0OjEyMzQ3IiwibG9jYWxob3N0OjEyMzQ2Il0sIlV1aWRzIjpbImI5MGZjYzE1LTc4NzktNGJhYy05MDRjLTQ3MzFlZjA0OTgwOCIsIjY1ZTA0NGRiLTY1YTYtNGY4YS05YTM0LTZhMjFmMWFkNzE3MiIsIjdjMzUyOGFhLWZjNTUtNDNjOC04ZGY4LTJhM2FkZmMzZjcxMiIsIjE0MGI2OTNkLWE0ZjYtNDAyYy1iYzAxLWRhMTUyMzQyZWJjYSIsImQ3YjNhZTkxLWMwNWQtNGNlMC04NzVlLTg3MzY5Njc4NmNjNyIsImYyOTdmNGY3LTQxODEtNDE0MS04YTgzLTk5OTU1ZmE5NzRlNSJdfQ__
+```
+
+返回 200
+
+
+
+我们用HEAD命令查看实际写入token的数据有多少
+
+```sh
+$ curl -I localhost:12351/temp/eyJOYW1lIjoidGVzdDYiLCJTaXplIjoxMDAwMDAsIkhhc2giOiJObFlrSzdrUn5ZQUxKR01jRkVzNEpCclJpa2w2YXIsYk9TdDlnZnFoSkVNXyIsIlNlcnZlcnMiOlsibG9jYWxob3N0OjEyMzUwIiwibG9jYWxob3N0OjEyMzQ1IiwibG9jYWxob3N0OjEyMzQ5IiwibG9jYWxob3N0OjEyMzQ4IiwibG9jYWxob3N0OjEyMzQ3IiwibG9jYWxob3N0OjEyMzQ2Il0sIlV1aWRzIjpbImI5MGZjYzE1LTc4NzktNGJhYy05MDRjLTQ3MzFlZjA0OTgwOCIsIjY1ZTA0NGRiLTY1YTYtNGY4YS05YTM0LTZhMjFmMWFkNzE3MiIsIjdjMzUyOGFhLWZjNTUtNDNjOC04ZGY4LTJhM2FkZmMzZjcxMiIsIjE0MGI2OTNkLWE0ZjYtNDAyYy1iYzAxLWRhMTUyMzQyZWJjYSIsImQ3YjNhZTkxLWMwNWQtNGNlMC04NzVlLTg3MzY5Njc4NmNjNyIsImYyOTdmNGY3LTQxODEtNDE0MS04YTgzLTk5OTU1ZmE5NzRlNSJdfQ__
+```
+
+![image-20220908160636996](https://harukaze-blog.oss-cn-shenzhen.aliyuncs.com/article/image-20220908160636996.png)
+
+我们可以看到写入的数据只有32 000个字节,所以下一次PUT要从32 000字节开始,让我们一次性把剩下的数据全部上传。
+
+```sh
+$ dd if=/tmp/file of=/tmp/second bs=1000 skip=32 count=68
+```
+
+```sh
+$ curl -v -XPUT --data-binary @/tmp/second localhost:12351/temp/eyJOYW1lIjoidGVzdDYiLCJTaXplIjoxMDAwMDAsIkhhc2giOiJObFlrSzdrUn5ZQUxKR01jRkVzNEpCclJpa2w2YXIsYk9TdDlnZnFoSkVNXyIsIlNlcnZlcnMiOlsibG9jYWxob3N0OjEyMzUwIiwibG9jYWxob3N0OjEyMzQ1IiwibG9jYWxob3N0OjEyMzQ5IiwibG9jYWxob3N0OjEyMzQ4IiwibG9jYWxob3N0OjEyMzQ3IiwibG9jYWxob3N0OjEyMzQ2Il0sIlV1aWRzIjpbImI5MGZjYzE1LTc4NzktNGJhYy05MDRjLTQ3MzFlZjA0OTgwOCIsIjY1ZTA0NGRiLTY1YTYtNGY4YS05YTM0LTZhMjFmMWFkNzE3MiIsIjdjMzUyOGFhLWZjNTUtNDNjOC04ZGY4LTJhM2FkZmMzZjcxMiIsIjE0MGI2OTNkLWE0ZjYtNDAyYy1iYzAxLWRhMTUyMzQyZWJjYSIsImQ3YjNhZTkxLWMwNWQtNGNlMC04NzVlLTg3MzY5Njc4NmNjNyIsImYyOTdmNGY3LTQxODEtNDE0MS04YTgzLTk5OTU1ZmE5NzRlNSJdfQ__
+```
+
+
+
+现在让我们GET这个对象对比一下数据
+
+```sh
+$ curl localhost:12351/object/test6 > /tmp/output
+$ diff -s /tmp/output /tmp/file
+```
+
+
+
+接下来让我们试试用 range 头部指定下载 test6 对象的后 68KB 数据。
+
+```sh
+$ curl localhost:12351/object/test6 -H "range: bytes=32000-" > /tmp/output2
+$ diff -s /tmp/output2 /tmp/output 
+```
+
